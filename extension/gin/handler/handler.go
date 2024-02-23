@@ -55,16 +55,26 @@ type HandlerManager struct {
 	errorHandler func(c *gin.Context, phase HandlerPhase, err error)
 }
 
+func (h *HandlerManager) CallErrorHandler(c *gin.Context, phase HandlerPhase, err error) {
+	if h.errorHandler == nil {
+		return
+	}
+
+	h.errorHandler(c, phase, err)
+}
+
 func (h *HandlerManager) Handle(handler any) gin.HandlerFunc {
 	assertHandler(handler)
 
 	v := reflect.ValueOf(handler)
 	t := v.Type()
 
+	// input returns handler's input arguments
 	input := func(c *gin.Context) ([]reflect.Value, error) {
 		in := make([]reflect.Value, 0, t.NumIn())
 		in = append(in, reflect.ValueOf(c))
 
+		// if handler has request argument then bind it
 		if t.NumIn() == 2 {
 			reqV := reflect.New(t.In(1).Elem())
 			req := reqV.Interface().(HandlerRequestType)
@@ -78,14 +88,19 @@ func (h *HandlerManager) Handle(handler any) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		var (
+			resp any
+			err  error
+		)
+
 		in, err := input(c)
 		if err != nil {
-			h.errorHandler(c, HandlerPhaseBind, err)
+			h.CallErrorHandler(c, HandlerPhaseBind, err)
 			return
 		}
 
 		out := v.Call(in)
-		var resp any
+
 		switch len(out) {
 		case 0:
 			return
@@ -98,17 +113,19 @@ func (h *HandlerManager) Handle(handler any) gin.HandlerFunc {
 			if errV := out[1].Interface(); errV != nil {
 				err = errV.(error)
 			}
+		default:
+			panic("handler return values count must be 2 or less")
 		}
 
 		if err != nil {
-			h.errorHandler(c, HandlerPhaseExec, err)
+			h.CallErrorHandler(c, HandlerPhaseExec, err)
 			return
 		}
 
 		if resp != nil {
 			if r, ok := resp.(HandlerResponseType); ok {
 				if err := r.Resp(c); err != nil {
-					h.errorHandler(c, HandlerPhaseResp, err)
+					h.CallErrorHandler(c, HandlerPhaseResp, err)
 				}
 			}
 		}
@@ -143,7 +160,7 @@ func assertHandler(handler any) {
 		panic("handler's first argument must be *gin.Context")
 	}
 
-	if t.NumIn() == 2 && t.In(1).Implements(reflect.TypeOf((*HandlerRequestType)(nil)).Elem()) {
+	if t.NumIn() == 2 && !t.In(1).Implements(reflect.TypeOf((*HandlerRequestType)(nil)).Elem()) {
 		panic("handler's second argument must be have Bind(*gin.Context) error method")
 	}
 

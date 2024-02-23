@@ -1,58 +1,121 @@
 package binding
 
 import (
-	"github.com/gin-gonic/gin"
+	"net/http"
+	"reflect"
+	"time"
+
 	"github.com/gin-gonic/gin/binding"
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/tlipoca9/errors"
 )
 
-type Binding interface {
-	Bind(*gin.Context, any)
+type DefaultBindingBuilder struct {
+	data DefaultBinding
 }
 
-type ginBinding struct {
-	binding binding.Binding
-}
-
-func (b *ginBinding) Bind(c *gin.Context, obj any) {
-	b.binding.Bind(c.Request, obj)
-}
-
-func Wrap(bd binding.Binding) Binding {
-	return &ginBinding{
-		binding: bd,
+func NewDefaultBindingBuilder() *DefaultBindingBuilder {
+	return &DefaultBindingBuilder{
+		data: DefaultBinding{
+			TagName: "default",
+			DecodeHooks: []mapstructure.DecodeHookFunc{
+				mapstructure.StringToIPHookFunc(),
+				mapstructure.StringToIPNetHookFunc(),
+				mapstructure.StringToNetIPAddrHookFunc(),
+				mapstructure.StringToNetIPAddrPortHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.OrComposeDecodeHookFunc(
+					mapstructure.StringToTimeHookFunc(time.RFC822),
+					mapstructure.StringToTimeHookFunc(time.RFC822Z),
+					mapstructure.StringToTimeHookFunc(time.RFC850),
+					mapstructure.StringToTimeHookFunc(time.RFC1123),
+					mapstructure.StringToTimeHookFunc(time.RFC1123Z),
+					mapstructure.StringToTimeHookFunc(time.RFC3339),
+					mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
+				),
+				StringToBasicTypeHookFunc(),
+			},
+		},
 	}
 }
 
-type ginBindingUri struct {
-	binding binding.BindingUri
+func (d *DefaultBindingBuilder) TagName(tagName string) {
+	d.data.TagName = tagName
 }
 
-func (b *ginBindingUri) Bind(c *gin.Context, obj any) {
-	m := make(map[string][]string)
-	for _, v := range c.Params {
-		m[v.Key] = []string{v.Value}
+func (d *DefaultBindingBuilder) DecodeHooks(decodeHooks ...mapstructure.DecodeHookFunc) {
+	d.data.DecodeHooks = decodeHooks
+}
+
+func (d *DefaultBindingBuilder) AddDecodeHook(decodeHook mapstructure.DecodeHookFunc) {
+	d.data.DecodeHooks = append(d.data.DecodeHooks, decodeHook)
+}
+
+func (d *DefaultBindingBuilder) Build() *DefaultBinding {
+	return &d.data
+}
+
+var _ binding.Binding = (*DefaultBinding)(nil)
+
+type DefaultBinding struct {
+	TagName     string
+	DecodeHooks []mapstructure.DecodeHookFunc
+}
+
+// Bind implements binding.Binding.
+func (b *DefaultBinding) Bind(_ *http.Request, obj any) error {
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		TagName:    "json",
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(b.DecodeHooks...),
+		Result:     obj,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create mapstructure decoder")
 	}
-	b.binding.BindUri(m, obj)
-}
 
-func WrapBindingUri(bd binding.BindingUri) Binding {
-	return &ginBindingUri{
-		binding: bd,
+	t := reflect.TypeOf(obj)
+
+	var parse func(t reflect.Type) map[string]any
+	parse = func(t reflect.Type) map[string]any {
+		if t.Kind() == reflect.Ptr {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct {
+			return nil
+		}
+
+		defaultValues := make(map[string]any)
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			key := f.Name
+			if name, ok := f.Tag.Lookup("json"); ok {
+				key = name
+			}
+
+			if f.Anonymous ||
+				f.Type.Kind() == reflect.Struct ||
+				(f.Type.Kind() == reflect.Ptr && f.Type.Elem().Kind() == reflect.Struct) {
+				defaultValues[key] = parse(f.Type)
+			}
+
+			if value, ok := f.Tag.Lookup(b.Name()); ok {
+				defaultValues[key] = value
+			}
+		}
+
+		return defaultValues
 	}
-}
 
-type composedBinding struct {
-	bindings []Binding
-}
-
-func (b *composedBinding) Bind(c *gin.Context, obj any) {
-	for _, bd := range b.bindings {
-		bd.Bind(c, obj)
+	defaultValues := parse(t)
+	if len(defaultValues) == 0 {
+		return nil
 	}
+
+	return decoder.Decode(defaultValues)
 }
 
-func Composed(bindings ...Binding) Binding {
-	return &composedBinding{
-		bindings: bindings,
-	}
+// Name implements binding.Binding.
+func (b *DefaultBinding) Name() string {
+	return b.TagName
 }
