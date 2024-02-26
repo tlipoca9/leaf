@@ -5,15 +5,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-viper/mapstructure/v2"
-	"github.com/golang-cz/devslog"
-	"github.com/tlipoca9/errors"
-	"github.com/tlipoca9/leaf/koanfleaf/defaults"
-
 	"github.com/knadh/koanf/parsers/dotenv"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
+
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/golang-cz/devslog"
+
+	"github.com/tlipoca9/errors"
+	"github.com/tlipoca9/leaf/koanfleaf/defaults"
 )
 
 type Conf struct {

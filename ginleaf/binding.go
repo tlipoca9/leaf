@@ -1,4 +1,4 @@
-package binding
+package ginleaf
 
 import (
 	"net/http"
@@ -74,10 +74,8 @@ func (b *DefaultBinding) Bind(_ *http.Request, obj any) error {
 		return errors.Wrap(err, "failed to create mapstructure decoder")
 	}
 
-	t := reflect.TypeOf(obj)
-
-	var parse func(t reflect.Type) map[string]any
-	parse = func(t reflect.Type) map[string]any {
+	var read func(t reflect.Type) map[string]any
+	read = func(t reflect.Type) map[string]any {
 		if t.Kind() == reflect.Ptr {
 			t = t.Elem()
 		}
@@ -85,29 +83,30 @@ func (b *DefaultBinding) Bind(_ *http.Request, obj any) error {
 			return nil
 		}
 
-		defaultValues := make(map[string]any)
+		out := make(map[string]any)
 		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
-			key := f.Name
-			if name, ok := f.Tag.Lookup("json"); ok {
-				key = name
+			field := t.Field(i)
+			k := field.Name
+			if kk, ok := field.Tag.Lookup("json"); ok {
+				k = kk
 			}
-
-			if f.Anonymous ||
-				f.Type.Kind() == reflect.Struct ||
-				(f.Type.Kind() == reflect.Ptr && f.Type.Elem().Kind() == reflect.Struct) {
-				defaultValues[key] = parse(f.Type)
+			v, found := field.Tag.Lookup(b.Name())
+			if !found {
+				if v := read(field.Type); v != nil {
+					out[k] = v
+				}
+				continue
 			}
-
-			if value, ok := f.Tag.Lookup(b.Name()); ok {
-				defaultValues[key] = value
-			}
+			out[k] = v
 		}
 
-		return defaultValues
+		if len(out) == 0 {
+			return nil
+		}
+		return out
 	}
 
-	defaultValues := parse(t)
+	defaultValues := read(reflect.TypeOf(obj))
 	if len(defaultValues) == 0 {
 		return nil
 	}

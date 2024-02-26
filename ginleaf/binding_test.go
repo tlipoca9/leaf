@@ -1,4 +1,4 @@
-package binding_test
+package ginleaf_test
 
 import (
 	"net"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tlipoca9/leaf/extension/gin/binding"
+	"github.com/tlipoca9/leaf/ginleaf"
 )
 
 type User struct {
@@ -25,8 +25,8 @@ type User struct {
 	Float32Field  float32       `default:"27.1"`
 	Float64Field  float64       `default:"27.1"`
 	ByteField1    byte          `default:"27"`
-	ByteField2    byte          `default:"a"`
-	RuneField     rune          `default:"好"`
+	ByteField2    byte          `default:"42"`
+	RuneField     rune          `default:"42"`
 	TimeField     time.Time     `default:"2006-01-02T15:04:05Z"`
 	DurationField time.Duration `default:"1h"`
 	IpField       net.IP        `default:"1.1.1.1"`
@@ -47,8 +47,8 @@ type User struct {
 	Float32PtrField  *float32       `default:"27.1"`
 	Float64PtrField  *float64       `default:"27.1"`
 	BytePtrField1    *byte          `default:"27"`
-	BytePtrField2    *byte          `default:"a"`
-	RunePtrField     *rune          `default:"好"`
+	BytePtrField2    *byte          `default:"42"`
+	RunePtrField     *rune          `default:"42"`
 	TimePtrField     *time.Time     `default:"2006-01-02T15:04:05Z"`
 	DurationPtrField *time.Duration `default:"1h"`
 	IpPtrField       *net.IP        `default:"1.1.1.1"`
@@ -78,8 +78,8 @@ func TestDefaultBinding(t *testing.T) {
 		assert.Equal(float32(27.1), user.Float32Field)
 		assert.Equal(float64(27.1), user.Float64Field)
 		assert.Equal(byte(27), user.ByteField1)
-		assert.Equal(byte('a'), user.ByteField2)
-		assert.Equal('好', user.RuneField)
+		assert.Equal(byte(42), user.ByteField2)
+		assert.Equal(rune(42), user.RuneField)
 		assert.Equal(time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC), user.TimeField)
 		assert.Equal(time.Hour, user.DurationField)
 		assert.Equal(net.IPv4(1, 1, 1, 1), user.IpField)
@@ -99,14 +99,14 @@ func TestDefaultBinding(t *testing.T) {
 		assert.Equal(float32(27.1), *user.Float32PtrField)
 		assert.Equal(float64(27.1), *user.Float64PtrField)
 		assert.Equal(byte(27), *user.BytePtrField1)
-		assert.Equal(byte('a'), *user.BytePtrField2)
-		assert.Equal('好', *user.RunePtrField)
+		assert.Equal(byte(42), *user.BytePtrField2)
+		assert.Equal(rune(42), *user.RunePtrField)
 		assert.Equal(time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC), *user.TimePtrField)
 		assert.Equal(time.Hour, *user.DurationPtrField)
 		assert.Equal(net.IPv4(1, 1, 1, 1), *user.IpPtrField)
 	}
 
-	b := binding.NewDefaultBindingBuilder().Build()
+	b := ginleaf.NewDefaultBindingBuilder().Build()
 	user := User{}
 	err := b.Bind(nil, &user)
 	if err != nil {
