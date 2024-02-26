@@ -15,18 +15,24 @@ func TestMain(m *testing.M) {
 }
 
 func TestUnmarshalWithConf(t *testing.T) {
+	loader := koanfleaf.NewConfigLoaderBuilder().
+		Verbose(true).
+		Tag("conf").
+		EnvPrefix("KOANFLEAF_UNITTEST_").
+		Build()
+
 	type Config1 struct {
-		A string            `conf:"a" default:"a_value"`
+		A string            `conf:"a"`
 		B bool              `conf:"b"`
 		C int               `conf:"c"`
-		D float64           `conf:"d" default:"123.123"`
-		E []string          `conf:"e" default:"1,2,3"`
+		D float64           `conf:"d"`
+		E []string          `conf:"e"`
 		F map[string]string `conf:"f"`
 		G struct {
 			H string  `conf:"h"`
 			I bool    `conf:"i"`
 			J int     `conf:"j"`
-			K float64 `conf:"k" default:"42.42"`
+			K float64 `conf:"k"`
 			L struct {
 				M string `conf:"m"`
 				N bool   `conf:"n"`
@@ -34,14 +40,14 @@ func TestUnmarshalWithConf(t *testing.T) {
 		} `conf:"g"`
 	}
 
-	var conf1 Config1
-	err := koanfleaf.UnmarshalWithConf(&conf1, koanfleaf.Conf{
-		Verbose:   true,
-		Tag:       "conf",
-		Delim:     ".",
-		EnvPrefix: "LEAF_UNITTEST_",
-	})
+	conf1 := Config1{
+		A: "a_value",
+		D: 123.123,
+		E: []string{"1", "2", "3"},
+	}
+	conf1.G.K = 42.42
+	err := loader.Load(&conf1)
 	if err != nil {
-		t.Fatalf("UnmarshalWithConf failed: %s", err.Error())
+		t.Fatalf("Load failed: %s", err.Error())
 	}
 }
