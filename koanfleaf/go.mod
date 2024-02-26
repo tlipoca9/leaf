@@ -4,7 +4,6 @@ go 1.21.3
 
 require (
 	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1
-	github.com/golang-cz/devslog v0.0.8
 	github.com/knadh/koanf/parsers/dotenv v0.1.0
 	github.com/knadh/koanf/providers/env v0.1.0
 	github.com/knadh/koanf/providers/file v0.1.0

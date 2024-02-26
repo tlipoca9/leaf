@@ -11,7 +11,6 @@ import (
 	"github.com/knadh/koanf/v2"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/golang-cz/devslog"
 
 	"github.com/tlipoca9/errors"
 	"github.com/tlipoca9/leaf/koanfleaf/defaults"
@@ -36,7 +35,9 @@ func UnmarshalWithConf(o any, conf Conf) error {
 		)
 	}
 	if conf.Verbose && conf.Logger == nil {
-		conf.Logger = slog.New(devslog.NewHandler(os.Stdout, nil))
+		conf.Logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}))
 	}
 
 	k := koanf.NewWithConf(koanf.Conf{
