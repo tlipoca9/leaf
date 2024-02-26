@@ -17,7 +17,13 @@ type SlogLoggerBuilder struct {
 
 func NewSlogLoggerBuilder() *SlogLoggerBuilder {
 	builder := &SlogLoggerBuilder{}
-	builder.data.Logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	builder.Logger(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	builder.Config(&logger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  logger.Warn,
+		IgnoreRecordNotFoundError: false,
+		Colorful:                  true,
+	})
 	return builder
 }
 
@@ -78,58 +84,35 @@ func (l *SlogLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		return
 	}
 
+	var (
+		level slog.Level
+		msg   string
+		attrs = make([]slog.Attr, 0, 2)
+	)
+
 	elapsed := time.Since(begin)
-	switch {
-	case err != nil && l.Config.LogLevel >= logger.Error && (!errors.Is(err, logger.ErrRecordNotFound) || !l.Config.IgnoreRecordNotFoundError):
-		sql, rows := fc()
-		if rows == -1 {
-			l.Logger.ErrorContext(
-				ctx, "",
-				"error", err,
-				"elapsed", elapsed,
-				"sql", sql,
-			)
-		} else {
-			l.Logger.ErrorContext(
-				ctx, "",
-				"error", err,
-				"elapsed", elapsed,
-				"rows", rows,
-				"sql", sql,
-			)
-		}
-	case l.Config.SlowThreshold != 0 && elapsed > l.Config.SlowThreshold && l.Config.LogLevel >= logger.Warn:
-		sql, rows := fc()
-		msg := fmt.Sprintf("SLOW SQL >= %v", l.Config.SlowThreshold)
-		if rows == -1 {
-			l.Logger.WarnContext(
-				ctx, msg,
-				"elapsed", elapsed,
-				"sql", sql,
-			)
-		} else {
-			l.Logger.WarnContext(
-				ctx, msg,
-				"elapsed", elapsed,
-				"rows", rows,
-				"sql", sql,
-			)
-		}
-	case l.Config.LogLevel == logger.Info:
-		sql, rows := fc()
-		if rows == -1 {
-			l.Logger.InfoContext(
-				ctx, "",
-				"elapsed", elapsed,
-				"sql", sql,
-			)
-		} else {
-			l.Logger.InfoContext(
-				ctx, "",
-				"elapsed", elapsed,
-				"rows", rows,
-				"sql", sql,
-			)
-		}
+	attrs = append(attrs, slog.Duration("elapsed", elapsed))
+
+	sql, rows := fc()
+	attrs = append(attrs, slog.String("sql", sql))
+	if rows != -1 {
+		attrs = append(attrs, slog.Int64("rows", rows))
 	}
+
+	switch {
+	case l.Config.LogLevel >= logger.Error && err != nil && (!errors.Is(err, logger.ErrRecordNotFound) || !l.Config.IgnoreRecordNotFoundError):
+		level = slog.LevelError
+		msg = "gorm: error"
+		attrs = append(attrs, slog.String("error", err.Error()))
+	case l.Config.LogLevel >= logger.Warn && l.Config.SlowThreshold != 0 && elapsed > l.Config.SlowThreshold:
+		level = slog.LevelWarn
+		msg = fmt.Sprintf("SLOW SQL >= %v", l.Config.SlowThreshold)
+	case l.Config.LogLevel >= logger.Info:
+		level = slog.LevelInfo
+		msg = "gorm: info"
+	default:
+		return
+	}
+
+	l.Logger.LogAttrs(ctx, level, msg, attrs...)
 }
