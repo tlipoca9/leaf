@@ -1,120 +1,70 @@
 package ginleaf
 
 import (
+	"bytes"
 	"net/http"
-	"reflect"
-	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/tlipoca9/errors"
 )
 
-type DefaultBindingBuilder struct {
-	data DefaultBinding
+func Bind(c *gin.Context, obj any, bindings ...binding.Binding) error {
+	var b binding.Binding
+	switch len(bindings) {
+	case 0:
+		b = defaultStructsBinding
+	case 1:
+		b = bindings[0]
+	default:
+		b = ComposeBinding(bindings...)
+	}
+
+	if err := c.ShouldBindUri(obj); err != nil {
+		return errors.Wrapf(err, "bind uri failed")
+	}
+
+	if err := c.ShouldBindWith(obj, b); err != nil {
+		return errors.Wrapf(err, "bind failed")
+	}
+
+	return nil
 }
 
-func NewDefaultBindingBuilder() *DefaultBindingBuilder {
-	return &DefaultBindingBuilder{
-		data: DefaultBinding{
-			TagName: "default",
-			DecodeHooks: []mapstructure.DecodeHookFunc{
-				mapstructure.StringToIPHookFunc(),
-				mapstructure.StringToIPNetHookFunc(),
-				mapstructure.StringToNetIPAddrHookFunc(),
-				mapstructure.StringToNetIPAddrPortHookFunc(),
-				mapstructure.StringToSliceHookFunc(","),
-				mapstructure.StringToTimeDurationHookFunc(),
-				mapstructure.OrComposeDecodeHookFunc(
-					mapstructure.StringToTimeHookFunc(time.RFC822),
-					mapstructure.StringToTimeHookFunc(time.RFC822Z),
-					mapstructure.StringToTimeHookFunc(time.RFC850),
-					mapstructure.StringToTimeHookFunc(time.RFC1123),
-					mapstructure.StringToTimeHookFunc(time.RFC1123Z),
-					mapstructure.StringToTimeHookFunc(time.RFC3339),
-					mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
-				),
-				StringToBasicTypeHookFunc(),
-			},
-		},
+var _ binding.Binding = (*ComposedBinding)(nil)
+
+type ComposedBinding struct {
+	name string
+
+	bindings []binding.Binding
+}
+
+func ComposeBinding(bindings ...binding.Binding) binding.Binding {
+	if len(bindings) == 0 {
+		panic("at least one binding is required")
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("compose")
+	for _, b := range bindings {
+		buf.WriteByte('_')
+		buf.WriteString(b.Name())
+	}
+	return &ComposedBinding{
+		name:     buf.String(),
+		bindings: bindings,
 	}
 }
 
-func (d *DefaultBindingBuilder) TagName(tagName string) {
-	d.data.TagName = tagName
+func (c *ComposedBinding) Name() string {
+	return c.name
 }
 
-func (d *DefaultBindingBuilder) DecodeHooks(decodeHooks ...mapstructure.DecodeHookFunc) {
-	d.data.DecodeHooks = decodeHooks
-}
-
-func (d *DefaultBindingBuilder) AddDecodeHook(decodeHook mapstructure.DecodeHookFunc) {
-	d.data.DecodeHooks = append(d.data.DecodeHooks, decodeHook)
-}
-
-func (d *DefaultBindingBuilder) Build() *DefaultBinding {
-	return &d.data
-}
-
-var _ binding.Binding = (*DefaultBinding)(nil)
-
-type DefaultBinding struct {
-	TagName     string
-	DecodeHooks []mapstructure.DecodeHookFunc
-}
-
-// Bind implements binding.Binding.
-func (b *DefaultBinding) Bind(_ *http.Request, obj any) error {
-	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		TagName:    "json",
-		DecodeHook: mapstructure.ComposeDecodeHookFunc(b.DecodeHooks...),
-		Result:     obj,
-	})
-	if err != nil {
-		return errors.Wrap(err, "failed to create mapstructure decoder")
+func (c *ComposedBinding) Bind(request *http.Request, obj any) error {
+	for _, b := range c.bindings {
+		if err := b.Bind(request, obj); err != nil {
+			return errors.Wrapf(err, "compose binding '%s'-'%s' bind failed", c.Name(), b.Name())
+		}
 	}
-
-	var read func(t reflect.Type) map[string]any
-	read = func(t reflect.Type) map[string]any {
-		if t.Kind() == reflect.Ptr {
-			t = t.Elem()
-		}
-		if t.Kind() != reflect.Struct {
-			return nil
-		}
-
-		out := make(map[string]any)
-		for i := 0; i < t.NumField(); i++ {
-			field := t.Field(i)
-			k := field.Name
-			if kk, ok := field.Tag.Lookup("json"); ok {
-				k = kk
-			}
-			v, found := field.Tag.Lookup(b.Name())
-			if !found {
-				if v := read(field.Type); v != nil {
-					out[k] = v
-				}
-				continue
-			}
-			out[k] = v
-		}
-
-		if len(out) == 0 {
-			return nil
-		}
-		return out
-	}
-
-	defaultValues := read(reflect.TypeOf(obj))
-	if len(defaultValues) == 0 {
-		return nil
-	}
-
-	return decoder.Decode(defaultValues)
-}
-
-// Name implements binding.Binding.
-func (b *DefaultBinding) Name() string {
-	return b.TagName
+	return nil
 }
