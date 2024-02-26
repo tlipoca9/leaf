@@ -84,20 +84,13 @@ func (l *SlogLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		return
 	}
 
+	elapsed := time.Since(begin)
+
 	var (
 		level slog.Level
 		msg   string
-		attrs = make([]slog.Attr, 0, 2)
+		attrs []slog.Attr
 	)
-
-	elapsed := time.Since(begin)
-	attrs = append(attrs, slog.Duration("elapsed", elapsed))
-
-	sql, rows := fc()
-	attrs = append(attrs, slog.String("sql", sql))
-	if rows != -1 {
-		attrs = append(attrs, slog.Int64("rows", rows))
-	}
 
 	switch {
 	case l.Config.LogLevel >= logger.Error && err != nil && (!errors.Is(err, logger.ErrRecordNotFound) || !l.Config.IgnoreRecordNotFoundError):
@@ -112,6 +105,14 @@ func (l *SlogLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql 
 		msg = "gorm: info"
 	default:
 		return
+	}
+
+	attrs = append(attrs, slog.Duration("elapsed", elapsed))
+
+	sql, rows := fc()
+	attrs = append(attrs, slog.String("sql", sql))
+	if rows != -1 {
+		attrs = append(attrs, slog.Int64("rows", rows))
 	}
 
 	l.Logger.LogAttrs(ctx, level, msg, attrs...)
