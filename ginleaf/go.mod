@@ -5,7 +5,7 @@ go 1.21.6
 require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-playground/validator/v10 v10.14.0
-	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1
+	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1.0.20240226124921-b71c54176d2b
 	github.com/stretchr/testify v1.8.4
 	github.com/tlipoca9/errors v0.0.0-20240222152303-9fed87e6ae14
 )

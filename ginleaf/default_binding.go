@@ -19,11 +19,7 @@ func NewDefaultBindingBuilder() *DefaultBindingBuilder {
 		data: DefaultBinding{
 			TagName: "default",
 			DecodeHooks: []mapstructure.DecodeHookFunc{
-				mapstructure.StringToIPHookFunc(),
-				mapstructure.StringToIPNetHookFunc(),
-				mapstructure.StringToNetIPAddrHookFunc(),
-				mapstructure.StringToNetIPAddrPortHookFunc(),
-				mapstructure.StringToSliceHookFunc(","),
+				mapstructure.StringToBasicTypeHookFunc(),
 				mapstructure.StringToTimeDurationHookFunc(),
 				mapstructure.OrComposeDecodeHookFunc(
 					mapstructure.StringToTimeHookFunc(time.RFC822),
@@ -34,7 +30,11 @@ func NewDefaultBindingBuilder() *DefaultBindingBuilder {
 					mapstructure.StringToTimeHookFunc(time.RFC3339),
 					mapstructure.StringToTimeHookFunc(time.RFC3339Nano),
 				),
-				StringToBasicTypeHookFunc(),
+				mapstructure.StringToIPHookFunc(),
+				mapstructure.StringToIPNetHookFunc(),
+				mapstructure.StringToNetIPAddrHookFunc(),
+				mapstructure.StringToNetIPAddrPortHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
 			},
 		},
 	}
